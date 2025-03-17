@@ -1,9 +1,16 @@
+import rusHyphenate from './rusHyphenate.js';
+
 const basicFontSizeValues = [
   "12",
   "13",
   "14",
   "15",
   "16"
+];
+
+const textAlignValues = [
+  "left",
+  "justify"
 ];
 
 const columnCountValues = [
@@ -49,6 +56,14 @@ const templateHTML = `
       font-size: 16px;
     }
 
+    :host([text-align="left"]) {
+      text-align: left;
+    }
+
+    :host([text-align="justify"]) {
+      text-align: justify;
+    }
+
     :host([column-count="1"]) {
       max-width: calc(400px * 1 + 2.75em * 0);
     }
@@ -88,7 +103,7 @@ const templateHTML = `
 
     ::slotted(p) {
       margin-bottom: 1.2em;    
-      text-wrap: pretty;
+      hyphens: auto;
     }
   </style>
   <article><slot /></article>
@@ -139,6 +154,9 @@ class TypoText extends HTMLElement {
 
   // connect component
   connectedCallback() {
+    Array.from(this.children).forEach((item) => {
+      item.textContent = rusHyphenate(item.textContent)
+    })
     // this.textContent = `Hello ${this.name}!`;
   }
 }
