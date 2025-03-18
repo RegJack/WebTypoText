@@ -6,89 +6,7 @@ const columnCountValues = ['1', '2', '3', '4']
 
 const templateHTML = `
   <style>   
-    :host {
-      display: block;
-      max-width: 400px;
-      font-size: 12px;
-      font-family: Verdana;
-    }
-
-    :host article {
-      width: 100%;
-      column-width: 400px;
-      column-gap: 2.75em;
-      line-height: 1.2em;
-    }
-
-    :host([font-size="12"]) {
-      font-size: 12px;
-    }
-
-    :host([font-size="13"]) {
-      font-size: 13px;
-    }
-
-    :host([font-size="14"]) {
-      font-size: 14px;
-    }
-
-    :host([font-size="15"]) {
-      font-size: 15px;
-    }
-
-    :host([font-size="16"]) {
-      font-size: 16px;
-    }
-
-    :host([text-align="left"]) {
-      text-align: left;
-    }
-
-    :host([text-align="justify"]) {
-      text-align: justify;
-    }
-
-    :host([column-count="1"]) {
-      max-width: calc(400px * 1 + 2.75em * 0);
-    }
-
-    :host([column-count="2"]) {
-      max-width: calc(400px * 2 + 2.75em * 1);
-    }
-
-    :host([column-count="3"]) {
-      max-width: calc(400px * 3 + 2.75em * 2);
-    }
-
-    :host([column-count="4"]) {
-      max-width: calc(400px * 4 + 2.75em * 3);
-    }
-
-    :host([column-count="1"]) article {
-      column-count: 1;
-    }
-
-    :host([column-count="2"]) article {
-      column-count: 2;
-    }
-
-    :host([column-count="3"]) article {
-      column-count: 3;
-    }
-
-    :host([column-count="4"]) article {
-      column-count: 4;
-    }
-
-    ::slotted(*) {
-      margin: 0;    
-      padding: 0;    
-    }
-
-    ::slotted(p) {
-      margin-bottom: 1.2em;    
-      hyphens: auto;
-    }
+    @import "/src/typo-text.css";
   </style>
   <article><slot /></article>
 `
@@ -121,6 +39,14 @@ function rusHyphenate(text) {
   return hyphenatedText
 }
 
+function noBreakPrepositions(text) {
+  const noBreakSpace = '\u00A0'
+  
+  return text.replace(
+    /(\s[о|в|с|к|но|он|из|на|со|и|для|у|как])( )([("«А-яЁёЙй])/gmu,
+    '$1' + noBreakSpace + '$3'
+  )
+}
 
 class TypoText extends HTMLElement {
   //  /**
@@ -168,6 +94,8 @@ class TypoText extends HTMLElement {
   connectedCallback() {
     Array.from(this.children).forEach((item) => {
       item.textContent = rusHyphenate(item.textContent)
+      item.textContent = noBreakPrepositions(item.textContent)
+      
     })
     // this.textContent = `Hello ${this.name}!`;
   }
