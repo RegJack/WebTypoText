@@ -1,24 +1,10 @@
-import rusHyphenate from './rusHyphenate.js';
+import rusHyphenate from './rusHyphenate.js'
 
-const basicFontSizeValues = [
-  "12",
-  "13",
-  "14",
-  "15",
-  "16"
-];
+const basicFontSizeValues = ['12', '13', '14', '15', '16']
 
-const textAlignValues = [
-  "left",
-  "justify"
-];
+const textAlignValues = ['left', 'justify']
 
-const columnCountValues = [
-  "1",
-  "2",
-  "3",
-  "4"
-];
+const columnCountValues = ['1', '2', '3', '4']
 
 const templateHTML = `
   <style>   
@@ -107,10 +93,38 @@ const templateHTML = `
     }
   </style>
   <article><slot /></article>
-`;
+`
+
+function rusHyphenate(text) {
+  let hyphenatedText = text
+  const all = '[абвгдеёжзийклмнопрстуфхцчшщъыьэюя]',
+    vowel = '[аеёиоуыэюя]',
+    consonant = '[бвгджзклмнпрстфхцчшщ]',
+    zn = '[йъь]',
+    shy = '\xAD',
+    hyp = []
+
+  hyp[0] = new RegExp('(' + zn + ')(' + all + all + ')', 'ig')
+  hyp[1] = new RegExp('(' + vowel + ')(' + vowel + all + ')', 'ig')
+  hyp[2] = new RegExp('(' + vowel + consonant + ')(' + consonant + vowel + ')', 'ig')
+  hyp[3] = new RegExp('(' + consonant + vowel + ')(' + consonant + vowel + ')', 'ig')
+  hyp[4] = new RegExp('(' + vowel + consonant + ')(' + consonant + consonant + vowel + ')', 'ig')
+  hyp[5] = new RegExp(
+    '(' + vowel + consonant + consonant + ')(' + consonant + consonant + vowel + ')',
+    'ig'
+  )
+
+  for (let i = 0; i <= 5; ++i) {
+    while (hyp[i].test(hyphenatedText)) {
+      hyphenatedText = hyphenatedText.replaceAll(hyp[i], '$1' + shy + '$2')
+    }
+  }
+
+  return hyphenatedText
+}
+
 
 class TypoText extends HTMLElement {
-
   //  /**
   //  * Gets the columnCount of the object.
   //  */
@@ -134,11 +148,11 @@ class TypoText extends HTMLElement {
   // }
 
   constructor() {
-    super();
+    super()
 
     this.attachShadow({
       mode: 'closed'
-    }).innerHTML = templateHTML;
+    }).innerHTML = templateHTML
   }
 
   // component attributes
@@ -161,4 +175,4 @@ class TypoText extends HTMLElement {
   }
 }
 
-customElements.define('typo-text', TypoText);
+customElements.define('typo-text', TypoText)
