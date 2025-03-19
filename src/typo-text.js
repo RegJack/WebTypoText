@@ -41,7 +41,7 @@ function rusHyphenate(text) {
 
 function noBreakPrepositions(text) {
   const noBreakSpace = '\u00A0'
-  
+
   return text.replace(
     /(\s[о|в|с|к|но|он|из|на|со|и|для|у|как])( )([("«А-яЁёЙй])/gmu,
     '$1' + noBreakSpace + '$3'
@@ -101,14 +101,71 @@ class TypoText extends HTMLElement {
     }
   }
 
+  _rounded(number, fractionDigits) {
+    return parseFloat(number.toFixed(fractionDigits))
+  }
+
+  _getInfo(paragraphs) {
+    const p = document.createElement('p')
+    document.body.appendChild(p)
+    p.style.width = getComputedStyle(this).getPropertyValue('--column-width')
+    let totalCharsAmount = 0
+    let totalLinesAmount = 0
+    let averageCharsAmountInLine = 0
+
+    for (const item of paragraphs) {
+      p.style.whiteSpace = getComputedStyle(item).textWrap
+      p.style.textAlign = getComputedStyle(item).textAlign
+      p.style.fontFamily = getComputedStyle(item).fontFamily
+      p.style.fontSize = getComputedStyle(item).fontSize
+      p.style.lineHeight = getComputedStyle(item).lineHeight
+
+      let charsAmountInLine = item.textContent.length
+      for (let i = 0; i < charsAmountInLine; i++) {
+        p.textContent += item.textContent[i]
+        if (p.offsetHeight > getComputedStyle(item).lineHeight.split('px')[0]) {
+          charsAmountInLine = i - 1
+          break
+        }
+      }
+      p.textContent = ''
+
+      const linesAmount = Math.round(
+        parseFloat(item.offsetHeight) / parseFloat(getComputedStyle(item).lineHeight.split('px')[0])
+      )
+      console.log(
+        `Абзац\n Количество строк: ${linesAmount}\n Количество символов в тексте: ${
+          item.textContent.length
+        }\n Среднее количество символов в строке (math): ${
+          this._rounded(item.textContent.length / linesAmount, 2)
+        }\n Среднее количество символов в строке (custom): ${this._rounded(charsAmountInLine, 2)}`
+      )
+
+      totalCharsAmount += item.textContent.length
+      totalLinesAmount += linesAmount
+      averageCharsAmountInLine += charsAmountInLine
+    }
+
+    averageCharsAmountInLine = averageCharsAmountInLine / paragraphs.length
+
+    console.log(
+      `Итого\n Количество строк: ${totalLinesAmount}\n Количество символов в тексте: ${totalCharsAmount}\n Среднее количество символов в строке (math): ${
+        this._rounded(totalCharsAmount / totalLinesAmount, 2)
+      }\n Среднее количество символов в строке (custom): ${this._rounded(averageCharsAmountInLine, 2)}`
+    )
+
+    document.body.removeChild(p)
+  }
 
   // connect component
   connectedCallback() {
     Array.from(this.children).forEach((item) => {
       item.textContent = rusHyphenate(item.textContent)
       item.textContent = noBreakPrepositions(item.textContent)
-      
     })
+
+    this._customOnLoad(this._getInfo, Array.from(this.children))
+
     // this.textContent = `Hello ${this.name}!`;
   }
 }
