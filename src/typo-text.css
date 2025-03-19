@@ -1,20 +1,21 @@
 :host {
   display: block;
-  max-width: 400px;
+  max-width: var(--column-width);
   text-align: left;
   font-size: 12px;
   font-family: Verdana;
   margin: 0 auto;
 
-  --max-width-1-column: calc(400px * 1 + 2.75em * 0);
-  --max-width-2-column: calc(400px * 2 + 2.75em * 1);
-  --max-width-3-column: calc(400px * 3 + 2.75em * 2);
-  --max-width-4-column: calc(400px * 4 + 2.75em * 3);
+  --column-width: 400px;
+  --max-width-1-column: calc(var(--column-width) * 1 + 2.75em * 0);
+  --max-width-2-column: calc(var(--column-width) * 2 + 2.75em * 1);
+  --max-width-3-column: calc(var(--column-width) * 3 + 2.75em * 2);
+  --max-width-4-column: calc(var(--column-width) * 4 + 2.75em * 3);
 }
 
 :host article {
   width: 100%;
-  column-width: 400px;
+  column-width: var(--column-width);
   column-gap: 2.75em;
   line-height: 1.2em;
 }

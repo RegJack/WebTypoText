@@ -90,6 +90,18 @@ class TypoText extends HTMLElement {
   //   this[property] = newValue;
   // }
 
+  _customOnLoad(callback, ...args) {
+    if (getComputedStyle(this).getPropertyValue('--column-width') != '') {
+      callback.call(this, ...args)
+    } else {
+      console.log('Trying to get values...')
+      return setTimeout(() => {
+        this._customOnLoad(callback, ...args)
+      }, 10)
+    }
+  }
+
+
   // connect component
   connectedCallback() {
     Array.from(this.children).forEach((item) => {
