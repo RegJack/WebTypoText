@@ -41,7 +41,7 @@ function rusHyphenate(text) {
 
 function noBreakPrepositions(text) {
   const noBreakSpace = '\u00A0'
-  
+
   return text.replace(
     /(\s[о|в|с|к|но|он|из|на|со|и|для|у|как])( )([("«А-яЁёЙй])/gmu,
     '$1' + noBreakSpace + '$3'
@@ -162,8 +162,10 @@ class TypoText extends HTMLElement {
     Array.from(this.children).forEach((item) => {
       item.textContent = rusHyphenate(item.textContent)
       item.textContent = noBreakPrepositions(item.textContent)
-      
     })
+
+    this._customOnLoad(this._getInfo, Array.from(this.children))
+
     // this.textContent = `Hello ${this.name}!`;
   }
 }
