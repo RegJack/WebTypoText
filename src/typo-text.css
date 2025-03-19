@@ -1,0 +1,114 @@
+:host {
+  display: block;
+  max-width: 400px;
+  text-align: left;
+  font-size: 12px;
+  font-family: Verdana;
+  margin: 0 auto;
+
+  --max-width-1-column: calc(400px * 1 + 2.75em * 0);
+  --max-width-2-column: calc(400px * 2 + 2.75em * 1);
+  --max-width-3-column: calc(400px * 3 + 2.75em * 2);
+  --max-width-4-column: calc(400px * 4 + 2.75em * 3);
+}
+
+:host article {
+  width: 100%;
+  column-width: 400px;
+  column-gap: 2.75em;
+  line-height: 1.2em;
+}
+
+:host([font-size="12"]) {
+  font-size: 12px;
+}
+
+:host([font-size="13"]) {
+  font-size: 13px;
+}
+
+:host([font-size="14"]) {
+  font-size: 14px;
+}
+
+:host([font-size="15"]) {
+  font-size: 15px;
+}
+
+:host([font-size="16"]) {
+  font-size: 16px;
+}
+
+:host([text-align="left"]) {
+  text-align: left;
+}
+
+:host([text-align="justify"]) {
+  text-align: justify;
+}
+
+:host([column-count="1"]) {
+  max-width: var(--max-width-1-column);
+}
+
+:host([column-count="2"]) {
+  max-width: var(--max-width-2-column);
+
+  @media (max-width: calc(400px * 2 + 2.75em * 1)) {
+    max-width: var(--max-width-1-column);
+  }
+}
+
+:host([column-count="3"]) {
+  max-width: var(--max-width-3-column);
+
+  @media (max-width: calc(400px * 3 + 2.75em * 2)) {
+    max-width: var(--max-width-2-column);
+  }
+
+  @media (max-width: calc(400px * 2 + 2.75em * 1)) {
+    max-width: var(--max-width-1-column);
+  }
+}
+
+:host([column-count="4"]) {
+  max-width: var(--max-width-4-column);
+
+  @media (max-width: calc(400px * 4 + 2.75em * 3)) {
+    max-width: var(--max-width-3-column);
+  }
+
+  @media (max-width: calc(400px * 3 + 2.75em * 2)) {
+    max-width: var(--max-width-2-column);
+  }
+
+  @media (max-width: calc(400px * 2 + 2.75em * 1)) {
+    max-width: var(--max-width-1-column);
+  }
+}
+
+:host([column-count="1"]) article {
+  column-count: 1;
+}
+
+:host([column-count="2"]) article {
+  column-count: 2;
+}
+
+:host([column-count="3"]) article {
+  column-count: 3;
+}
+
+:host([column-count="4"]) article {
+  column-count: 4;
+}
+
+::slotted(*) {
+  margin: 0;
+  padding: 0;
+}
+
+::slotted(p) {
+  margin-bottom: 1.2em;
+  hyphens: auto;
+}
