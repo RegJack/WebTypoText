@@ -77,6 +77,9 @@ class TypoText extends HTMLElement {
     this.attachShadow({
       mode: 'closed'
     }).innerHTML = templateHTML
+    
+    this.typographySettings = {}
+    this.fontMetrics = {}
   }
 
   // component attributes
@@ -92,12 +95,15 @@ class TypoText extends HTMLElement {
 
   _customOnLoad(callback, ...args) {
     if (getComputedStyle(this).getPropertyValue('--column-width') != '') {
-      callback.call(this, ...args)
+      return callback.call(this, ...args)
     } else {
       console.log('Trying to get values...')
-      return setTimeout(() => {
-        this._customOnLoad(callback, ...args)
-      }, 10)
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          resolve(this._customOnLoad(callback, ...args))
+        }, 10)
+      });
+      
     }
   }
 
@@ -114,16 +120,18 @@ class TypoText extends HTMLElement {
     let averageCharsAmountInLine = 0
 
     for (const item of paragraphs) {
-      p.style.whiteSpace = getComputedStyle(item).textWrap
-      p.style.textAlign = getComputedStyle(item).textAlign
-      p.style.fontFamily = getComputedStyle(item).fontFamily
-      p.style.fontSize = getComputedStyle(item).fontSize
-      p.style.lineHeight = getComputedStyle(item).lineHeight
+      p.style.whiteSpace = this.typographySettings.whiteSpace
+      p.style.textWrap = this.typographySettings.textWrap
+      p.style.hyphens = this.typographySettings.hyphens
+      p.style.textAlign = this.typographySettings.textAlign
+      p.style.fontFamily = this.typographySettings.fontFamily
+      p.style.fontSize = this.typographySettings.fontSizePx
+      p.style.lineHeight = this.typographySettings.lineHeightPx
 
       let charsAmountInLine = item.textContent.length
       for (let i = 0; i < charsAmountInLine; i++) {
         p.textContent += item.textContent[i]
-        if (p.offsetHeight > getComputedStyle(item).lineHeight.split('px')[0]) {
+        if (p.offsetHeight > this.typographySettings.lineHeight) {
           charsAmountInLine = i - 1
           break
         }
@@ -131,14 +139,15 @@ class TypoText extends HTMLElement {
       p.textContent = ''
 
       const linesAmount = Math.round(
-        parseFloat(item.offsetHeight) / parseFloat(getComputedStyle(item).lineHeight.split('px')[0])
+        parseFloat(item.offsetHeight) / parseFloat(this.typographySettings.lineHeight)
       )
       console.log(
         `Абзац\n Количество строк: ${linesAmount}\n Количество символов в тексте: ${
           item.textContent.length
-        }\n Среднее количество символов в строке (math): ${
-          this._rounded(item.textContent.length / linesAmount, 2)
-        }\n Среднее количество символов в строке (custom): ${this._rounded(charsAmountInLine, 2)}`
+        }\n Среднее количество символов в строке (math): ${this._rounded(
+          item.textContent.length / linesAmount,
+          2
+        )}\n Среднее количество символов в строке (custom): ${this._rounded(charsAmountInLine, 2)}`
       )
 
       totalCharsAmount += item.textContent.length
@@ -149,21 +158,43 @@ class TypoText extends HTMLElement {
     averageCharsAmountInLine = averageCharsAmountInLine / paragraphs.length
 
     console.log(
-      `Итого\n Количество строк: ${totalLinesAmount}\n Количество символов в тексте: ${totalCharsAmount}\n Среднее количество символов в строке (math): ${
-        this._rounded(totalCharsAmount / totalLinesAmount, 2)
-      }\n Среднее количество символов в строке (custom): ${this._rounded(averageCharsAmountInLine, 2)}`
+      `Итого\n Количество строк: ${totalLinesAmount}\n Количество символов в тексте: ${totalCharsAmount}\n Среднее количество символов в строке (math): ${this._rounded(
+        totalCharsAmount / totalLinesAmount,
+        2
+      )}\n Среднее количество символов в строке (custom): ${this._rounded(
+        averageCharsAmountInLine,
+        2
+      )}`
     )
 
     document.body.removeChild(p)
   }
 
+  _getTypographySettings(paragraph) {
+    return {
+      fontFamily: getComputedStyle(paragraph).fontFamily,
+      fontSize: parseFloat(getComputedStyle(paragraph).fontSize.split("px")[0]),
+      fontSizePx: getComputedStyle(paragraph).fontSize,
+      lineHeight: parseFloat(getComputedStyle(paragraph).lineHeight.split("px")[0]),
+      lineHeightPx: getComputedStyle(paragraph).lineHeight,
+      textAlign: getComputedStyle(paragraph).textAlign,
+      textWrap: getComputedStyle(paragraph).textWrap,
+      hyphens: getComputedStyle(paragraph).hyphens,
+      whiteSpace: getComputedStyle(paragraph).whiteSpace,
+    }
+  }
+  
+
   // connect component
-  connectedCallback() {
-    Array.from(this.children).forEach((item) => {
+  async connectedCallback() {
+    Array.from(this.getElementsByTagName('p')).forEach((item) => {
       item.textContent = rusHyphenate(item.textContent)
       item.textContent = noBreakPrepositions(item.textContent)
     })
 
+    this.typographySettings = await this._customOnLoad(this._getTypographySettings, this.getElementsByTagName('p')[0])
+    // await this._customOnLoad(this._getInfo, Array.from(this.getElementsByTagName('p')))
+    console.log("typograohySettings", this.typographySettings)
     this._customOnLoad(this._getInfo, Array.from(this.children))
 
     // this.textContent = `Hello ${this.name}!`;
