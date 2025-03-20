@@ -6,6 +6,7 @@
   font-family: Verdana;
   margin: 0 auto;
 
+  --margin-top-img-sibling: -2.4px;
   --column-width: 400px;
   --max-width-1-column: calc(var(--column-width) * 1 + 2.75em * 0);
   --max-width-2-column: calc(var(--column-width) * 2 + 2.75em * 1);
@@ -110,6 +111,7 @@
 }
 
 ::slotted(p) {
+  font-size: 1em;
   margin-bottom: 1.2em;
   hyphens: auto;
 }
