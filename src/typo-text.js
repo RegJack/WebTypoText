@@ -78,6 +78,7 @@ class TypoText extends HTMLElement {
       mode: 'closed'
     }).innerHTML = templateHTML
     
+    this.columnWidth = {}
     this.typographySettings = {}
     this.fontMetrics = {}
   }
@@ -102,12 +103,14 @@ class TypoText extends HTMLElement {
         setTimeout(() => {
           resolve(this._customOnLoad(callback, ...args))
         }, 10)
-      });
-      
+      })
     }
   }
 
   _rounded(number, fractionDigits) {
+    if (typeof number != 'number') {
+      return parseFloat(parseFloat(number).toFixed(fractionDigits))
+    }
     return parseFloat(number.toFixed(fractionDigits))
   }
 
@@ -170,32 +173,142 @@ class TypoText extends HTMLElement {
     document.body.removeChild(p)
   }
 
+  _getColumnWidth() {
+    const columnWidthPx = getComputedStyle(this).getPropertyValue('--column-width')
+    const columnWidth = this._rounded(columnWidthPx.split('px')[0], 2)
+    return { number: columnWidth, px: columnWidthPx }
+  }
+
   _getTypographySettings(paragraph) {
     return {
       fontFamily: getComputedStyle(paragraph).fontFamily,
-      fontSize: parseFloat(getComputedStyle(paragraph).fontSize.split("px")[0]),
+      fontWeight: getComputedStyle(paragraph).fontWeight,
+      fontSize: parseFloat(getComputedStyle(paragraph).fontSize.split('px')[0]),
       fontSizePx: getComputedStyle(paragraph).fontSize,
-      lineHeight: parseFloat(getComputedStyle(paragraph).lineHeight.split("px")[0]),
+      lineHeight: parseFloat(getComputedStyle(paragraph).lineHeight.split('px')[0]),
       lineHeightPx: getComputedStyle(paragraph).lineHeight,
       textAlign: getComputedStyle(paragraph).textAlign,
       textWrap: getComputedStyle(paragraph).textWrap,
       hyphens: getComputedStyle(paragraph).hyphens,
-      whiteSpace: getComputedStyle(paragraph).whiteSpace,
+      whiteSpace: getComputedStyle(paragraph).whiteSpace
     }
   }
-  
+
+  // https://github.com/soulwire/FontMetrics
+  _getFontMetrics(
+    fontFamily = 'Verdana',
+    fontWeight = 'normal',
+    fontSize = 12,
+    origin = 'baseline'
+  ) {
+    const basicChars = {
+      capHeight: 'С',
+      baseline: 'н',
+      xHeight: 'х',
+      descent: 'р',
+      ascent: 'б',
+      tittle: 'ё'
+    }
+
+    const canvas = document.createElement('canvas')
+    const context = canvas.getContext('2d')
+    const padding = fontSize * 0.5
+
+    canvas.width = fontSize * 2
+    canvas.height = fontSize * 2 + padding
+    context.font = `${fontWeight} ${fontSize}px ${fontFamily}`
+    context.textBaseline = 'top'
+    context.textAlign = 'center'
+
+    const setAlignment = (baseline = 'top') => {
+      const ty = baseline === 'bottom' ? canvas.height : 0
+      context.setTransform(1, 0, 0, 1, 0, ty)
+      context.textBaseline = baseline
+    }
+
+    const updateText = (text) => {
+      context.clearRect(0, 0, canvas.width, canvas.height)
+      context.fillText(text, canvas.width / 2, padding, canvas.width)
+    }
+
+    const computeLineHeight = () => {
+      const letter = 'A'
+      setAlignment('bottom')
+      const gutter = canvas.height - measureBottom(letter)
+      setAlignment('top')
+      return measureBottom(letter) + gutter
+    }
+
+    const getPixels = (text) => {
+      updateText(text)
+      return context.getImageData(0, 0, canvas.width, canvas.height).data
+    }
+
+    const getFirstIndex = (pixels) => {
+      for (let i = 3, n = pixels.length; i < n; i += 4) {
+        if (pixels[i] > 0) return (i - 3) / 4
+      }
+      return pixels.length
+    }
+
+    const getLastIndex = (pixels) => {
+      for (let i = pixels.length - 1; i >= 3; i -= 4) {
+        if (pixels[i] > 0) return i / 4
+      }
+      return 0
+    }
+
+    const normalize = (metrics, fontSize, origin) => {
+      const result = {}
+      const offset = metrics[origin]
+      for (let key in metrics) {
+        result[key] = (metrics[key] - offset) / fontSize
+      }
+      return result
+    }
+
+    const measureTop = (text) => Math.round(getFirstIndex(getPixels(text)) / canvas.width) - padding
+
+    const measureBottom = (text) =>
+      Math.round(getLastIndex(getPixels(text)) / canvas.width) - padding
+
+    const getMetrics = (chars = basicChars) => ({
+      capHeight: measureTop(chars.capHeight),
+      baseline: measureBottom(chars.baseline),
+      xHeight: measureTop(chars.xHeight),
+      descent: measureBottom(chars.descent),
+      bottom: computeLineHeight(),
+      ascent: measureTop(chars.ascent),
+      tittle: measureTop(chars.tittle),
+      top: 0
+    })
+
+    return normalize(getMetrics(), fontSize, origin)
+  }
+
 
   // connect component
   async connectedCallback() {
-    Array.from(this.getElementsByTagName('p')).forEach((item) => {
-      item.textContent = rusHyphenate(item.textContent)
-      item.textContent = noBreakPrepositions(item.textContent)
-    })
+    for (const paragraph of Array.from(this.getElementsByTagName('p'))) {
+      paragraph.textContent = rusHyphenate(paragraph.textContent)
+      paragraph.textContent = noBreakPrepositions(paragraph.textContent)
+    }
 
-    this.typographySettings = await this._customOnLoad(this._getTypographySettings, this.getElementsByTagName('p')[0])
+    this.columnWidth = await this._customOnLoad(this._getColumnWidth)
+    this.typographySettings = await this._customOnLoad(
+      this._getTypographySettings,
+      this.getElementsByTagName('p')[0]
+    )
+    this.fontMetrics = await this._customOnLoad(
+      this._getFontMetrics,
+      this.typographySettings.fontFamily,
+      this.typographySettings.fontWeight,
+      200,
+      'baseline'
+    )
     // await this._customOnLoad(this._getInfo, Array.from(this.getElementsByTagName('p')))
-    console.log("typograohySettings", this.typographySettings)
-    this._customOnLoad(this._getInfo, Array.from(this.children))
+    console.log('typographySettings', this.typographySettings)
+    console.log('fontMetrics', this.fontMetrics)
 
     // this.textContent = `Hello ${this.name}!`;
   }
