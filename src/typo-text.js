@@ -75,27 +75,58 @@ class TypoText extends HTMLElement {
     super()
 
     this.attachShadow({
-      mode: 'closed'
+      mode: 'open'
     }).innerHTML = templateHTML
 
-    this.columnWidth = {}
     this.typographySettings = {}
     this.fontMetrics = {}
   }
 
   // component attributes
-  // static get observedAttributes() {
-  //   return ['name'];
-  // }
+  static get observedAttributes() {
+    return ['font-size', 'column-width', 'column-count', 'column-gap']
+  }
 
   // attribute change
-  // attributeChangedCallback(property, oldValue, newValue) {
-  //   if (oldValue === newValue) return;
-  //   this[property] = newValue;
-  // }
+  attributeChangedCallback(property, oldValue, newValue) {
+    if (oldValue === newValue) return
+    switch (property) {
+      case 'font-size':
+        this[property] = this._checkIsUnitSet(newValue)
+        this.style.setProperty('--base-font-size', this[property])
+
+        break
+
+      case 'column-width':
+        this[property] = this._checkIsUnitSet(newValue)
+        this.style.setProperty('--column-width', this[property])
+        break
+
+      case 'column-count':
+        this[property] = newValue
+        this.style.setProperty('--column-count', this[property])
+        break
+
+      case 'column-gap':
+        this[property] = this._checkIsUnitSet(newValue)
+        this.style.setProperty('--column-gap', this[property])
+        break
+
+      default:
+        break
+    }
+  }
+
+  _checkIsUnitSet(value) {
+    return /^(\d+)$/g.test(value) ? `${value}px` : value
+  }
+
+  _removeUnits(value) {
+    return parseFloat(value.replace(/(px|rem|em|%)$/g, ''))
+  }
 
   _customOnLoad(callback, ...args) {
-    if (getComputedStyle(this).getPropertyValue('--column-width') != '') {
+    if (getComputedStyle(this).getPropertyValue('--margin-top-img-sibling') != '') {
       return callback.call(this, ...args)
     } else {
       console.log('Trying to get values...')
@@ -171,12 +202,6 @@ class TypoText extends HTMLElement {
     )
 
     document.body.removeChild(p)
-  }
-
-  _getColumnWidth() {
-    const columnWidthPx = getComputedStyle(this).getPropertyValue('--column-width')
-    const columnWidth = this._rounded(columnWidthPx.split('px')[0], 2)
-    return { number: columnWidth, px: columnWidthPx }
   }
 
   _getTypographySettings(paragraph) {
@@ -286,34 +311,65 @@ class TypoText extends HTMLElement {
     return normalize(getMetrics(), fontSize, origin)
   }
 
+  _setColumnWidthStyles() {
+    const article = this.shadowRoot.querySelector('article')
+    const articleComputedStyle = getComputedStyle(article)
+
+    this['column-count'] = this._removeUnits(articleComputedStyle.columnCount)
+    this['column-width'] = this._removeUnits(articleComputedStyle.columnWidth)
+    this['column-gap'] = this._removeUnits(articleComputedStyle.columnGap)
+    this.breakpoints = []
+
+    for (let i = 1; i <= this['column-count']; i++) {
+      this.breakpoints.push(this['column-width'] * i + this['column-gap'] * (i - 1))
+    }
+
+    this.breakpoints.reverse()
+
+    const resizeObserver = new ResizeObserver((entries, observer) => {
+      entries.forEach((entry) => {
+        const currentBreakpoint = this.breakpoints.find(
+          (value) => value <= parseInt(entry.contentBoxSize[0].inlineSize)
+        )
+        if (article.style.maxWidth != `${currentBreakpoint}px`) {
+          article.style.maxWidth = `${currentBreakpoint}px`
+          this._rerender()
+        }
+      })
+    })
+
+    resizeObserver.observe(this)
+  }
+
   _removeSpaceBetweenImageAndParagraph(figure, previousParagraph, nextSibling) {
     if (nextSibling && figure.getBoundingClientRect().x == nextSibling.getBoundingClientRect().x) {
-      nextSibling.style.marginTop = getComputedStyle(this).getPropertyValue(
-        '--margin-top-img-sibling'
-      )
+      // nextSibling.style.marginTop = getComputedStyle(this).getPropertyValue(
+      //   '--margin-top-img-sibling'
+      // )
     }
     if (previousParagraph && this.getBoundingClientRect().y != figure.getBoundingClientRect().y) {
       previousParagraph.style.marginBottom = '0px'
     }
   }
 
-  _getImageHeight(figure, image, topOffset, bottomOffset) {
+  _getImageHeight(figure, image) {
     if (figure.nextElementSibling) {
-    return this._rounded(
+      return this._rounded(
         Math.round(image.offsetHeight / this.typographySettings.lineHeight) *
           this.typographySettings.lineHeight -
-          topOffset -
-          bottomOffset,
+          this.topOffset -
+          this.bottomOffset,
         2
       )
-     } else { return this._rounded(
-     Math.round(
+    } else {
+      return this._rounded(
+        Math.round(
           (this.getBoundingClientRect().bottom - figure.getBoundingClientRect().top) /
             this.typographySettings.lineHeight
         ) *
           this.typographySettings.lineHeight -
-          topOffset -
-          bottomOffset,
+          this.topOffset -
+          this.bottomOffset,
         2
       )
     }
@@ -322,19 +378,40 @@ class TypoText extends HTMLElement {
   _setCorrectImageSize(image) {
     const figure = this._createFigureFromImage(image)
 
-    const topOffset =
-      this.typographySettings.lineHeight -
-      (this.fontMetrics.descent - this.fontMetrics.xHeight) * this.typographySettings.fontSize
-    const bottomOffset = this.fontMetrics.descent * this.typographySettings.fontSize
-
-    const correctImageHeight = this._getImageHeight(figure, image, topOffset, bottomOffset)
-
-    image.style.height = `${correctImageHeight}px`
     image.style.width = '100%'
     image.style.objectFit = image.getAttribute('object-fit') || 'cover'
     image.style.objectPosition = image.getAttribute('object-position') || 'center center'
-    figure.style.marginTop = `${this.typographySettings.lineHeight + topOffset}px`
-    figure.style.marginBottom = figure.nextElementSibling ? `${this.typographySettings.lineHeight + bottomOffset}px` : `${bottomOffset}px`
+
+    const img = figure.querySelector('img')
+    const isContain = image.style.objectFit == 'contain'
+
+    if (isContain) {
+      const oRatio = img.naturalWidth / img.naturalHeight
+      const cRatio = img.width / img.height
+
+      if (oRatio > cRatio) {
+        img.height = img.width / oRatio
+      } else {
+        img.height = img.height
+      }
+    }
+
+    const correctImageHeight = this._getImageHeight(figure, image)
+
+    image.style.height = `${correctImageHeight}px`
+
+    this._setFigureOffsets(figure)
+  }
+
+  _setFigureOffsets(figure) {
+    figure.style.paddingTop = `${this.topOffset}px`
+    figure.style.marginBottom = `${this.typographySettings.lineHeight}px`
+
+    if (this.getBoundingClientRect().top == figure.getBoundingClientRect().top) {
+      figure.style.marginTop = `0px`
+    } else {
+      figure.style.marginTop = `${this.typographySettings.lineHeight}px`
+    }
 
     this._removeSpaceBetweenImageAndParagraph(
       figure,
@@ -369,14 +446,21 @@ class TypoText extends HTMLElement {
     return figure
   }
 
+  async _rerender() {
+    for (const figure of Array.from(this.getElementsByTagName('figure'))) {
+      this._setFigureOffsets(figure)
+    }
+  }
+
   // connect component
   async connectedCallback() {
+    await this._customOnLoad(this._setColumnWidthStyles)
+
     for (const paragraph of Array.from(this.getElementsByTagName('p'))) {
       paragraph.textContent = rusHyphenate(paragraph.textContent)
       paragraph.textContent = noBreakPrepositions(paragraph.textContent)
     }
 
-    this.columnWidth = await this._customOnLoad(this._getColumnWidth)
     this.typographySettings = await this._customOnLoad(
       this._getTypographySettings,
       this.getElementsByTagName('p')[0]
@@ -392,15 +476,19 @@ class TypoText extends HTMLElement {
     console.log('typographySettings', this.typographySettings)
     console.log('fontMetrics', this.fontMetrics)
 
+    this.topOffset =
+      this.typographySettings.lineHeight -
+      (this.fontMetrics.descent - this.fontMetrics.xHeight) * this.typographySettings.fontSize
+    this.bottomOffset = this.fontMetrics.descent * this.typographySettings.fontSize
+
     for (const image of Array.from(this.getElementsByTagName('img'))) {
       await this._customOnLoad(this._setCorrectImageSize, image)
     }
-    console.log(getComputedStyle(this.getElementsByTagName('h1')[0]).fontSize, getComputedStyle(this.getElementsByTagName('h1')[0]).lineHeight)
+    console.log(
+      getComputedStyle(this.getElementsByTagName('p')[0]).fontSize,
+      getComputedStyle(this.getElementsByTagName('p')[0]).lineHeight
+    )
     // this.textContent = `Hello ${this.name}!`;
-    for (const paragraph of Array.from(this.getElementsByTagName('p'))) {
-      console.log(paragraph.getBoundingClientRect().bottom)
-    }
-    console.log(this.getBoundingClientRect())
   }
 }
 
