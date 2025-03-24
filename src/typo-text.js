@@ -77,7 +77,7 @@ class TypoText extends HTMLElement {
     this.attachShadow({
       mode: 'closed'
     }).innerHTML = templateHTML
-    
+
     this.columnWidth = {}
     this.typographySettings = {}
     this.fontMetrics = {}
@@ -286,6 +286,88 @@ class TypoText extends HTMLElement {
     return normalize(getMetrics(), fontSize, origin)
   }
 
+  _removeSpaceBetweenImageAndParagraph(figure, previousParagraph, nextSibling) {
+    if (nextSibling && figure.getBoundingClientRect().x == nextSibling.getBoundingClientRect().x) {
+      nextSibling.style.marginTop = getComputedStyle(this).getPropertyValue(
+        '--margin-top-img-sibling'
+      )
+    }
+    if (previousParagraph && this.getBoundingClientRect().y != figure.getBoundingClientRect().y) {
+      previousParagraph.style.marginBottom = '0px'
+    }
+  }
+
+  _getImageHeight(figure, image, topOffset, bottomOffset) {
+    if (figure.nextElementSibling) {
+    return this._rounded(
+        Math.round(image.offsetHeight / this.typographySettings.lineHeight) *
+          this.typographySettings.lineHeight -
+          topOffset -
+          bottomOffset,
+        2
+      )
+     } else { return this._rounded(
+     Math.round(
+          (this.getBoundingClientRect().bottom - figure.getBoundingClientRect().top) /
+            this.typographySettings.lineHeight
+        ) *
+          this.typographySettings.lineHeight -
+          topOffset -
+          bottomOffset,
+        2
+      )
+    }
+  }
+
+  _setCorrectImageSize(image) {
+    const figure = this._createFigureFromImage(image)
+
+    const topOffset =
+      this.typographySettings.lineHeight -
+      (this.fontMetrics.descent - this.fontMetrics.xHeight) * this.typographySettings.fontSize
+    const bottomOffset = this.fontMetrics.descent * this.typographySettings.fontSize
+
+    const correctImageHeight = this._getImageHeight(figure, image, topOffset, bottomOffset)
+
+    image.style.height = `${correctImageHeight}px`
+    image.style.width = '100%'
+    image.style.objectFit = image.getAttribute('object-fit') || 'cover'
+    image.style.objectPosition = image.getAttribute('object-position') || 'center center'
+    figure.style.marginTop = `${this.typographySettings.lineHeight + topOffset}px`
+    figure.style.marginBottom = figure.nextElementSibling ? `${this.typographySettings.lineHeight + bottomOffset}px` : `${bottomOffset}px`
+
+    this._removeSpaceBetweenImageAndParagraph(
+      figure,
+      figure.previousElementSibling,
+      figure.nextElementSibling
+    )
+  }
+
+  _createFigureFromImage(image) {
+    const figure = document.createElement('figure')
+
+    if (image.nextElementSibling) {
+      this.insertBefore(figure, image.nextElementSibling)
+    } else {
+      this.appendChild(figure)
+    }
+    figure.appendChild(image)
+
+    if (image.getAttribute('caption')) {
+      const caption = document.createElement('figcaption')
+      caption.style.textAlign = 'center'
+      caption.style.fontFamily = this.typographySettings.fontFamily
+      caption.style.fontSize = `${this.typographySettings.fontSize - 2}px`
+      caption.style.lineHeight = this.typographySettings.lineHeightPx
+      caption.textContent = image.getAttribute('caption')
+      figure.appendChild(caption)
+
+      figure.style.breakInside = 'avoid-column'
+      // figure.style.display = 'table'
+    }
+
+    return figure
+  }
 
   // connect component
   async connectedCallback() {
@@ -310,7 +392,15 @@ class TypoText extends HTMLElement {
     console.log('typographySettings', this.typographySettings)
     console.log('fontMetrics', this.fontMetrics)
 
+    for (const image of Array.from(this.getElementsByTagName('img'))) {
+      await this._customOnLoad(this._setCorrectImageSize, image)
+    }
+    console.log(getComputedStyle(this.getElementsByTagName('h1')[0]).fontSize, getComputedStyle(this.getElementsByTagName('h1')[0]).lineHeight)
     // this.textContent = `Hello ${this.name}!`;
+    for (const paragraph of Array.from(this.getElementsByTagName('p'))) {
+      console.log(paragraph.getBoundingClientRect().bottom)
+    }
+    console.log(this.getBoundingClientRect())
   }
 }
 
