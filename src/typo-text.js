@@ -192,8 +192,8 @@ class TypoText extends HTMLElement {
     const noBreakSpace = '\u00A0'
 
     return text.replace(
-      /(\s[о|в|с|к|но|он|из|на|со|и|для|у|как])( )([("«А-яЁёЙй])/gmu,
-      '$1' + noBreakSpace + '$3'
+      /(\s)(о|в|во|с|к|но|он|из|на|со|и|для|у|как)(\s)([\("«А-яЁёЙй])/gmui,
+      '$1' + '$2' + noBreakSpace + '$4'
     )
   }
 
