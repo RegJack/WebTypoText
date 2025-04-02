@@ -1,0 +1,30 @@
+{
+  "name": "web-typo-text",
+  "version": "0.2.0",
+  "description": "Web-components for creating informative and readable pages",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RegJack/WebTypoText.git"
+  },
+  "keywords": [
+    "typography",
+    "text",
+    "web-component",
+    "component"
+  ],
+  "author": "RegJack",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/RegJack/WebTypoText/issues"
+  },
+  "homepage": "https://github.com/RegJack/WebTypoText#readme"
+}

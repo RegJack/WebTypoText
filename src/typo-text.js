@@ -6,47 +6,74 @@ const columnCountValues = ['1', '2', '3', '4']
 
 const templateHTML = `
   <style>   
-    @import "/src/typo-text.css";
+    :host {
+      display: block;
+      /* max-width: var(--column-width); */
+      text-align: left;
+      font-size: var(--base-font-size);
+      font-family: Verdana;
+      margin: 0 auto;
+      text-rendering: geometricPrecision;
+      position: relative;
+
+      --margin-top-img-sibling: -2.4px;
+      --column-count: 1;
+      --column-width: 400px;
+      --column-gap: calc(var(--base-font-size) * 2.75);
+      --base-font-size: 12px;
+      --max-width-1-column: calc(var(--column-width) * 1 + 2.75em * 0);
+      --max-width-2-column: calc(var(--column-width) * 2 + 2.75em * 1);
+      --max-width-3-column: calc(var(--column-width) * 3 + 2.75em * 2);
+      --max-width-4-column: calc(var(--column-width) * 4 + 2.75em * 3);
+    }
+
+    :host article {
+      width: 100%;
+      margin: 0 auto;
+      column-count: var(--column-count);
+      column-width: var(--column-width);
+      column-gap: var(--column-gap);
+      line-height: calc(var(--base-font-size) * 1.2);
+      /* background-image:repeating-linear-gradient(to bottom, transparent 0 calc(calc(var(--base-font-size) * 1.2) - 1px), #ccc calc(calc(var(--base-font-size) * 1.2) - 1px) calc(var(--base-font-size) * 1.2)) */
+    }
+
+    :host([text-align="left"]) {
+      text-align: left;
+    }
+
+    :host([text-align="justify"]) {
+      text-align: justify;
+    }
+
+    :host([column-count="1"]) article {
+      --column-count: 1;
+    }
+
+    :host([column-count="2"]) article {
+      --column-count: 2;
+    }
+
+    :host([column-count="3"]) article {
+      --column-count: 3;
+    }
+
+    :host([column-count="4"]) article {
+      --column-count: 4;
+    }
+
+    ::slotted(*) {
+      margin: 0;
+      padding: 0;
+    }
+
+    ::slotted(p) {
+      font-size: 1em;
+      margin-bottom: 1.2em;
+      hyphens: auto;
+    }
   </style>
   <article><slot /></article>
 `
-
-function rusHyphenate(text) {
-  let hyphenatedText = text
-  const all = '[абвгдеёжзийклмнопрстуфхцчшщъыьэюя]',
-    vowel = '[аеёиоуыэюя]',
-    consonant = '[бвгджзклмнпрстфхцчшщ]',
-    zn = '[йъь]',
-    shy = '\xAD',
-    hyp = []
-
-  hyp[0] = new RegExp('(' + zn + ')(' + all + all + ')', 'ig')
-  hyp[1] = new RegExp('(' + vowel + ')(' + vowel + all + ')', 'ig')
-  hyp[2] = new RegExp('(' + vowel + consonant + ')(' + consonant + vowel + ')', 'ig')
-  hyp[3] = new RegExp('(' + consonant + vowel + ')(' + consonant + vowel + ')', 'ig')
-  hyp[4] = new RegExp('(' + vowel + consonant + ')(' + consonant + consonant + vowel + ')', 'ig')
-  hyp[5] = new RegExp(
-    '(' + vowel + consonant + consonant + ')(' + consonant + consonant + vowel + ')',
-    'ig'
-  )
-
-  for (let i = 0; i <= 5; ++i) {
-    while (hyp[i].test(hyphenatedText)) {
-      hyphenatedText = hyphenatedText.replaceAll(hyp[i], '$1' + shy + '$2')
-    }
-  }
-
-  return hyphenatedText
-}
-
-function noBreakPrepositions(text) {
-  const noBreakSpace = '\u00A0'
-
-  return text.replace(
-    /(\s[о|в|с|к|но|он|из|на|со|и|для|у|как])( )([("«А-яЁёЙй])/gmu,
-    '$1' + noBreakSpace + '$3'
-  )
-}
 
 class TypoText extends HTMLElement {
   //  /**
@@ -84,11 +111,11 @@ class TypoText extends HTMLElement {
 
   // component attributes
   static get observedAttributes() {
-    return ['font-size', 'column-width', 'column-count', 'column-gap']
+    return ['font-size', 'column-width', 'column-count', 'column-gap', 'chars-per-line']
   }
 
   // attribute change
-  attributeChangedCallback(property, oldValue, newValue) {
+  async attributeChangedCallback(property, oldValue, newValue) {
     if (oldValue === newValue) return
     switch (property) {
       case 'font-size':
@@ -98,8 +125,10 @@ class TypoText extends HTMLElement {
         break
 
       case 'column-width':
-        this[property] = this._checkIsUnitSet(newValue)
-        this.style.setProperty('--column-width', this[property])
+        if (!this.getAttribute('chars-per-line')) {
+          this[property] = this._checkIsUnitSet(newValue)
+          this.style.setProperty('--column-width', this[property])
+        }
         break
 
       case 'column-count':
@@ -112,9 +141,60 @@ class TypoText extends HTMLElement {
         this.style.setProperty('--column-gap', this[property])
         break
 
+      case 'chars-per-line':
+        this[property] = newValue
+        this.style.setProperty('--chars-per-line', this[property])
+        if (newValue) {
+          const optimalWidth = await this._customOnLoad(
+            this._getOptimalLineWidth,
+            this.getElementsByTagName('p')[0],
+            this.getAttribute('chars-per-line')
+          )
+          this['column-width'] = `${optimalWidth}px`
+          this.style.setProperty('--column-width', this['column-width'])
+        }
+        break
+
       default:
         break
     }
+  }
+
+  _rusHyphenate(text) {
+    let hyphenatedText = text
+    const all = '[абвгдеёжзийклмнопрстуфхцчшщъыьэюя]',
+      vowel = '[аеёиоуыэюя]',
+      consonant = '[бвгджзклмнпрстфхцчшщ]',
+      zn = '[йъь]',
+      shy = '\xAD',
+      hyp = []
+
+    hyp[0] = new RegExp('(' + zn + ')(' + all + all + ')', 'ig')
+    hyp[1] = new RegExp('(' + vowel + ')(' + vowel + all + ')', 'ig')
+    hyp[2] = new RegExp('(' + vowel + consonant + ')(' + consonant + vowel + ')', 'ig')
+    hyp[3] = new RegExp('(' + consonant + vowel + ')(' + consonant + vowel + ')', 'ig')
+    hyp[4] = new RegExp('(' + vowel + consonant + ')(' + consonant + consonant + vowel + ')', 'ig')
+    hyp[5] = new RegExp(
+      '(' + vowel + consonant + consonant + ')(' + consonant + consonant + vowel + ')',
+      'ig'
+    )
+
+    for (let i = 0; i <= 5; ++i) {
+      while (hyp[i].test(hyphenatedText)) {
+        hyphenatedText = hyphenatedText.replaceAll(hyp[i], '$1' + shy + '$2')
+      }
+    }
+
+    return hyphenatedText
+  }
+
+  _noBreakPrepositions(text) {
+    const noBreakSpace = '\u00A0'
+
+    return text.replace(
+      /(\s[о|в|с|к|но|он|из|на|со|и|для|у|как])( )([("«А-яЁёЙй])/gmu,
+      '$1' + noBreakSpace + '$3'
+    )
   }
 
   _checkIsUnitSet(value) {
@@ -146,47 +226,53 @@ class TypoText extends HTMLElement {
   }
 
   _getInfo(paragraphs) {
-    const p = document.createElement('p')
-    document.body.appendChild(p)
-    p.style.width = getComputedStyle(this).getPropertyValue('--column-width')
+    // const p = document.createElement('p')
+    // document.body.appendChild(p)
+    // p.style.width = getComputedStyle(this).getPropertyValue('--column-width')
     let totalCharsAmount = 0
     let totalLinesAmount = 0
     let averageCharsAmountInLine = 0
 
     for (const item of paragraphs) {
-      p.style.whiteSpace = this.typographySettings.whiteSpace
-      p.style.textWrap = this.typographySettings.textWrap
-      p.style.hyphens = this.typographySettings.hyphens
-      p.style.textAlign = this.typographySettings.textAlign
-      p.style.fontFamily = this.typographySettings.fontFamily
-      p.style.fontSize = this.typographySettings.fontSizePx
-      p.style.lineHeight = this.typographySettings.lineHeightPx
+      const p = item.cloneNode()
+      p.textContent = ''
+      this.appendChild(p)
+      p.style.width = getComputedStyle(this).getPropertyValue('--column-width')
+      // p.style.whiteSpace = this.typographySettings.whiteSpace
+      // p.style.textWrap = this.typographySettings.textWrap
+      // p.style.hyphens = this.typographySettings.hyphens
+      // p.style.textAlign = this.typographySettings.textAlign
+      // p.style.fontFamily = this.typographySettings.fontFamily
+      // p.style.fontSize = this.typographySettings.fontSizePx
+      // p.style.lineHeight = this.typographySettings.lineHeightPx
 
-      let charsAmountInLine = item.textContent.length
+      const paragraphText = item.textContent.replace(/\u00AD/g, '')
+      let charsAmountInLine = paragraphText.length
       for (let i = 0; i < charsAmountInLine; i++) {
-        p.textContent += item.textContent[i]
-        if (p.offsetHeight > this.typographySettings.lineHeight) {
+        p.textContent += paragraphText[i]
+        if (p.offsetHeight > Math.round(this.typographySettings.lineHeight)) {
           charsAmountInLine = i - 1
           break
         }
       }
-      p.textContent = ''
 
       const linesAmount = Math.round(
         parseFloat(item.offsetHeight) / parseFloat(this.typographySettings.lineHeight)
       )
       console.log(
         `Абзац\n Количество строк: ${linesAmount}\n Количество символов в тексте: ${
-          item.textContent.length
+          paragraphText.length
         }\n Среднее количество символов в строке (math): ${this._rounded(
-          item.textContent.length / linesAmount,
+          paragraphText.length / linesAmount,
           2
         )}\n Среднее количество символов в строке (custom): ${this._rounded(charsAmountInLine, 2)}`
       )
 
-      totalCharsAmount += item.textContent.length
+      totalCharsAmount += paragraphText.length
       totalLinesAmount += linesAmount
       averageCharsAmountInLine += charsAmountInLine
+
+      this.removeChild(p)
     }
 
     averageCharsAmountInLine = averageCharsAmountInLine / paragraphs.length
@@ -200,17 +286,52 @@ class TypoText extends HTMLElement {
         2
       )}`
     )
+  }
 
-    document.body.removeChild(p)
+  _getCharsAmountInLine(paragraph) {
+    const p = paragraph.cloneNode()
+    p.textContent = ''
+    this.appendChild(p)
+    p.style.width = this['column-width']
+
+    const paragraphText = paragraph.textContent.replace(/\u00AD/g, '')
+    let charsAmountInLine = paragraphText.length
+    for (let i = 0; i < charsAmountInLine; i++) {
+      p.textContent += paragraphText[i]
+      if (p.offsetHeight > Math.round(this.typographySettings.lineHeight)) {
+        charsAmountInLine = i - 1
+        break
+      }
+    }
+    this.removeChild(p)
+
+    return this._rounded(charsAmountInLine, 2)
+  }
+
+  _getOptimalLineWidth(paragraph, charsPerLine) {
+    const p = paragraph.cloneNode()
+    p.textContent = ''
+    this.appendChild(p)
+    p.style.width = 'fit-content'
+    p.style.whiteSpace = 'nowrap'
+
+    const paragraphText = paragraph.textContent.replace(/\u00AD/g, '')
+    for (let i = 0; i < charsPerLine; i++) {
+      p.textContent += paragraphText[i] || 'а'
+    }
+    const optimalWidth = p.offsetWidth
+    this.removeChild(p)
+
+    return optimalWidth
   }
 
   _getTypographySettings(paragraph) {
     return {
       fontFamily: getComputedStyle(paragraph).fontFamily,
       fontWeight: getComputedStyle(paragraph).fontWeight,
-      fontSize: parseFloat(getComputedStyle(paragraph).fontSize.split('px')[0]),
+      fontSize: this._removeUnits(getComputedStyle(paragraph).fontSize),
       fontSizePx: getComputedStyle(paragraph).fontSize,
-      lineHeight: parseFloat(getComputedStyle(paragraph).lineHeight.split('px')[0]),
+      lineHeight: this._removeUnits(getComputedStyle(paragraph).lineHeight),
       lineHeightPx: getComputedStyle(paragraph).lineHeight,
       textAlign: getComputedStyle(paragraph).textAlign,
       textWrap: getComputedStyle(paragraph).textWrap,
@@ -328,11 +449,13 @@ class TypoText extends HTMLElement {
 
     const resizeObserver = new ResizeObserver((entries, observer) => {
       entries.forEach((entry) => {
-        const currentBreakpoint = this.breakpoints.find(
+        const currentBreakpointIndex = this.breakpoints.findIndex(
           (value) => value <= parseInt(entry.contentBoxSize[0].inlineSize)
         )
-        if (article.style.maxWidth != `${currentBreakpoint}px`) {
-          article.style.maxWidth = `${currentBreakpoint}px`
+        if (article.style.maxWidth != `${this.breakpoints.at(currentBreakpointIndex)}px`) {
+          article.style.maxWidth = `${this.breakpoints.at(currentBreakpointIndex)}px`
+          this.currentColumn = this['column-count'] - currentBreakpointIndex
+
           this._rerender()
         }
       })
@@ -353,26 +476,27 @@ class TypoText extends HTMLElement {
   }
 
   _getImageHeight(figure, image) {
-    if (figure.nextElementSibling) {
+    if (getComputedStyle(figure).maxWidth && getComputedStyle(figure).maxWidth.endsWith('%')) {
+      const figureWidth =
+        (getComputedStyle(figure).maxWidth.split('%')[0] * this._removeUnits(this['column-width'])) /
+        100
+      const oRatio = image.naturalWidth / image.naturalHeight
       return this._rounded(
-        Math.round(image.offsetHeight / this.typographySettings.lineHeight) *
+        Math.floor((figureWidth / oRatio) / this.typographySettings.lineHeight) *
           this.typographySettings.lineHeight -
-          this.topOffset -
-          this.bottomOffset,
-        2
-      )
-    } else {
-      return this._rounded(
-        Math.round(
-          (this.getBoundingClientRect().bottom - figure.getBoundingClientRect().top) /
-            this.typographySettings.lineHeight
-        ) *
-          this.typographySettings.lineHeight -
-          this.topOffset -
-          this.bottomOffset,
+          this.baseTopOffset -
+          this.baseBottomOffset,
         2
       )
     }
+
+    return optimalHeight = this._rounded(
+      Math.round(image.offsetHeight / this.typographySettings.lineHeight) *
+        this.typographySettings.lineHeight -
+        this.baseTopOffset -
+        this.baseBottomOffset,
+      2
+    )
   }
 
   _setCorrectImageSize(image) {
@@ -384,6 +508,7 @@ class TypoText extends HTMLElement {
 
     const img = figure.querySelector('img')
     const isContain = image.style.objectFit == 'contain'
+    const isFloat = figure.style.float == 'left' || figure.style.float == 'right'
 
     if (isContain) {
       const oRatio = img.naturalWidth / img.naturalHeight
@@ -396,6 +521,11 @@ class TypoText extends HTMLElement {
       }
     }
 
+    if (isFloat) {
+      figure.style.maxWidth = '30%'
+      figure.style.width = 'max-content'
+    }
+
     const correctImageHeight = this._getImageHeight(figure, image)
 
     image.style.height = `${correctImageHeight}px`
@@ -404,20 +534,26 @@ class TypoText extends HTMLElement {
   }
 
   _setFigureOffsets(figure) {
-    figure.style.paddingTop = `${this.topOffset}px`
+    figure.style.paddingTop = `${this.baseTopOffset}px`
     figure.style.marginBottom = `${this.typographySettings.lineHeight}px`
 
-    if (this.getBoundingClientRect().top == figure.getBoundingClientRect().top) {
-      figure.style.marginTop = `0px`
-    } else {
-      figure.style.marginTop = `${this.typographySettings.lineHeight}px`
-    }
+    if (!figure.style.float) {
+      if (this.getBoundingClientRect().top == figure.getBoundingClientRect().top) {
+        figure.style.marginTop = `0px`
+      } else {
+        figure.style.marginTop = `${this.typographySettings.lineHeight}px`
+      }
 
-    this._removeSpaceBetweenImageAndParagraph(
-      figure,
-      figure.previousElementSibling,
-      figure.nextElementSibling
-    )
+      this._removeSpaceBetweenImageAndParagraph(
+        figure,
+        figure.previousElementSibling,
+        figure.nextElementSibling
+      )
+    } else if (figure.style.float == 'left') {
+      figure.style.marginRight = `${this.typographySettings.lineHeight}px`
+    } else if (figure.style.float == 'right') {
+      figure.style.marginLeft = `${this.typographySettings.lineHeight}px`
+    }
   }
 
   _createFigureFromImage(image) {
@@ -430,35 +566,207 @@ class TypoText extends HTMLElement {
     }
     figure.appendChild(image)
 
-    if (image.getAttribute('caption')) {
+    if (image.getAttribute('image-caption')) {
       const caption = document.createElement('figcaption')
       caption.style.textAlign = 'center'
       caption.style.fontFamily = this.typographySettings.fontFamily
       caption.style.fontSize = `${this.typographySettings.fontSize - 2}px`
       caption.style.lineHeight = this.typographySettings.lineHeightPx
-      caption.textContent = image.getAttribute('caption')
+      caption.textContent = image.getAttribute('image-caption')
       figure.appendChild(caption)
 
       figure.style.breakInside = 'avoid-column'
-      // figure.style.display = 'table'
+      image.style.display = 'block'
+      image.style.marginBottom = `${this.baseBottomOffset}px`
+    }
+
+    if (
+      (!figure.nextElementSibling ||
+        !figure.previousElementSibling ||
+        figure.previousElementSibling.tagName == 'H1') &&
+      image.getAttribute('image-span')
+    ) {
+      const imageSpan = image.getAttribute('image-span')
+      if (imageSpan == 'all') {
+        figure.style.columnSpan = 'all'
+      }
+    }
+
+    if (
+      figure.nextElementSibling &&
+      figure.nextElementSibling.tagName == 'P' &&
+      image.getAttribute('image-float')
+    ) {
+      const imageFloat = image.getAttribute('image-float')
+      if (imageFloat == 'left' || imageFloat == 'right') {
+        figure.style.float = imageFloat
+      }
     }
 
     return figure
+  }
+
+  _getElementsByColumns() {
+    const elementsByColumns = []
+
+    let i = -1
+    let x
+    for (const element of this.children) {
+      if (element.getBoundingClientRect().x == x) {
+        elementsByColumns[i].push(element)
+      } else {
+        elementsByColumns.push([element])
+        x = element.getBoundingClientRect().x
+        i++
+      }
+    }
+
+    return elementsByColumns
+  }
+
+  _setHeadingStyle(heading) {
+    const headingSize = heading.getAttribute('heading-size') || 'md'
+    if (headingSize) {
+      switch (headingSize) {
+        case 'sm':
+          heading.style.fontSize = `${this.typographySettings.fontSize}px`
+          heading.style.lineHeight = `${this.typographySettings.lineHeight}px`
+          break
+
+        case 'md':
+          heading.style.fontSize = `${this.typographySettings.fontSize * 2}px`
+          heading.style.lineHeight = `${this.typographySettings.lineHeight * 2}px`
+          break
+
+        case 'lg':
+          heading.style.fontSize = `${this.typographySettings.fontSize * 3}px`
+          heading.style.lineHeight = `${this.typographySettings.lineHeight * 3}px`
+          heading.style.marginTop = `-${this.typographySettings.lineHeight}px`
+          break
+      }
+    }
+
+    const verticalShift =
+      this.fontMetrics.descent * this._removeUnits(getComputedStyle(heading).fontSize) - 2
+
+    heading.style.paddingTop = `${verticalShift}px`
+    heading.style.paddingBottom = `${this.typographySettings.lineHeight - verticalShift}px`
+    heading.style.overflow = 'visible'
+
+    const headingAlign = heading.getAttribute('heading-align')
+    if (headingAlign) {
+      switch (headingAlign) {
+        case 'center':
+          heading.style.textAlign = 'center'
+          break
+
+        default:
+          heading.style.textAlign = 'left'
+          break
+      }
+    }
+
+    const headingSpan = heading.getAttribute('heading-span')
+    if (headingSpan) {
+      heading.style.columnSpan = 'none'
+      heading.style.width = 'auto'
+      Array.from(this.children).forEach((element) => {
+        if (element.headingPaddingTop) element.style.paddingTop = 0
+        if (element.partOfPrevious) {
+          element.previousElementSibling.textContent += ` ${element.textContent}`
+          element.previousElementSibling.style.textAlignLast = 'left'
+          this.removeChild(element)
+        }
+      })
+
+      if (
+        headingSpan == 'all' ||
+        parseInt(headingSpan) == this.currentColumn ||
+        (parseInt(headingSpan) > this.currentColumn &&
+          parseInt(headingSpan) <= this['column-count'])
+      ) {
+        heading.style.columnSpan = 'all'
+      }
+      // else if (parseInt(headingSpan) < this.currentColumn) {
+      //   heading.style.width = `${this.breakpoints[this['column-count'] - parseInt(headingSpan)]}px`
+
+      //   const elementsByColumns = this._getElementsByColumns()
+      //   for (let i = 1; i < parseInt(headingSpan); i++) {
+      //     if (
+      //       elementsByColumns[i][0].getBoundingClientRect().top == this.getBoundingClientRect().top
+      //     ) {
+      //       if (!elementsByColumns[i][0].headingPaddingTop) {
+      //         elementsByColumns[i][0].style.paddingTop = `${heading.getBoundingClientRect().height}px`
+      //       elementsByColumns[i][0].headingPaddingTop = true
+      //       }
+      //     } else {
+      //       if (elementsByColumns[i - 1].at(-1).nodeName == 'P') {
+      //         const element = elementsByColumns[i - 1].at(-1)
+      //         const totalHeight = element.offsetHeight
+      //         const firstPartHeight = this.offsetHeight - elementsByColumns[i - 1].at(-1).offsetTop + this.typographySettings.lineHeight
+      //         const secondPartHeight = totalHeight - firstPartHeight
+
+      //         const firstPartProportion = firstPartHeight / totalHeight
+
+      //         const paragraphClone = this.appendChild(element.cloneNode())
+      //         paragraphClone.textContent = element.textContent.slice(
+      //           Math.round(firstPartProportion * element.textContent.length)
+      //         )
+      //         let charNotFound = true
+      //         let k = 0
+      //         while (charNotFound) {
+      //           const currentChar =
+      //             element.textContent[
+      //               Math.round(firstPartProportion * element.textContent.length) - k
+      //             ]
+      //           console.log(currentChar)
+      //           if (currentChar == ' ' && currentChar != String.fromCharCode(160)) {
+      //             charNotFound = false
+      //           } else {
+      //             k++
+      //           }
+      //         }
+      //         this.removeChild(paragraphClone)
+      //         this.insertBefore(paragraphClone, element.nextElementSibling)
+      //         paragraphClone.textContent = element.textContent.slice(
+      //           Math.round(firstPartProportion * element.textContent.length) - k + 1
+      //         )
+      //         element.textContent = element.textContent.slice(
+      //           0,
+      //           Math.round(firstPartProportion * element.textContent.length) - k
+      //         )
+      //         element.style.textAlignLast = 'justify'
+      //         paragraphClone.style.paddingTop = `${heading.getBoundingClientRect().height}px`
+      //         paragraphClone.headingPaddingTop = true
+      //         paragraphClone.partOfPrevious = true
+      //       }
+      //     }
+      //   }
+      // }
+    }
   }
 
   async _rerender() {
     for (const figure of Array.from(this.getElementsByTagName('figure'))) {
       this._setFigureOffsets(figure)
     }
+
+    const heading = this.getElementsByTagName('h1')[0]
+
+    setTimeout(() => {
+      this._customOnLoad(this._setHeadingStyle, heading)
+    }, 1)
   }
 
   // connect component
   async connectedCallback() {
-    await this._customOnLoad(this._setColumnWidthStyles)
+    setTimeout(async () => {
+      await this._customOnLoad(this._setColumnWidthStyles)
+    }, 1)
 
     for (const paragraph of Array.from(this.getElementsByTagName('p'))) {
-      paragraph.textContent = rusHyphenate(paragraph.textContent)
-      paragraph.textContent = noBreakPrepositions(paragraph.textContent)
+      paragraph.textContent = this._rusHyphenate(paragraph.textContent)
+      paragraph.textContent = this._noBreakPrepositions(paragraph.textContent)
     }
 
     this.typographySettings = await this._customOnLoad(
@@ -472,22 +780,37 @@ class TypoText extends HTMLElement {
       200,
       'baseline'
     )
-    // await this._customOnLoad(this._getInfo, Array.from(this.getElementsByTagName('p')))
+    this.charsAmountInLine = await this._customOnLoad(
+      this._getCharsAmountInLine,
+      this.getElementsByTagName('p')[0]
+    )
+
+    // setTimeout(() => {
+    //   this._customOnLoad(this._getInfo, Array.from(this.getElementsByTagName('p')))
+    // }, 1)
+
     console.log('typographySettings', this.typographySettings)
     console.log('fontMetrics', this.fontMetrics)
-
-    this.topOffset =
-      this.typographySettings.lineHeight -
-      (this.fontMetrics.descent - this.fontMetrics.xHeight) * this.typographySettings.fontSize
-    this.bottomOffset = this.fontMetrics.descent * this.typographySettings.fontSize
-
-    for (const image of Array.from(this.getElementsByTagName('img'))) {
-      await this._customOnLoad(this._setCorrectImageSize, image)
-    }
     console.log(
       getComputedStyle(this.getElementsByTagName('p')[0]).fontSize,
       getComputedStyle(this.getElementsByTagName('p')[0]).lineHeight
     )
+    console.log('charsAmountInLine', this.charsAmountInLine)
+
+    this.baseTopOffset =
+      this.typographySettings.lineHeight -
+      (this.fontMetrics.descent - this.fontMetrics.xHeight) * this.typographySettings.fontSize
+    this.baseBottomOffset = this.fontMetrics.descent * this.typographySettings.fontSize
+
+    for (const image of Array.from(this.getElementsByTagName('img'))) {
+      await this._customOnLoad(this._setCorrectImageSize, image)
+    }
+
+    const heading = this.getElementsByTagName('h1')[0]
+
+    setTimeout(() => {
+      this._customOnLoad(this._setHeadingStyle, heading)
+    }, 1)
     // this.textContent = `Hello ${this.name}!`;
   }
 }
