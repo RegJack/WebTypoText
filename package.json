@@ -1,8 +1,8 @@
 {
   "name": "web-typo-text",
-  "version": "0.2.0",
+  "version": "0.3.6",
   "description": "Web-components for creating informative and readable pages",
-  "main": "index.js",
+  "main": "src/typo-text.js",
   "directories": {
     "doc": "docs",
     "example": "examples",

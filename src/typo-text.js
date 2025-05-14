@@ -21,6 +21,7 @@ const templateHTML = `
       --column-width: 400px;
       --column-gap: calc(var(--base-font-size) * 2.75);
       --base-font-size: 12px;
+      --base-line-height: calc(var(--base-font-size) * 1.2);
       --max-width-1-column: calc(var(--column-width) * 1 + 2.75em * 0);
       --max-width-2-column: calc(var(--column-width) * 2 + 2.75em * 1);
       --max-width-3-column: calc(var(--column-width) * 3 + 2.75em * 2);
@@ -33,7 +34,7 @@ const templateHTML = `
       column-count: var(--column-count);
       column-width: var(--column-width);
       column-gap: var(--column-gap);
-      line-height: calc(var(--base-font-size) * 1.2);
+      line-height: var(--base-line-height);
       /* background-image:repeating-linear-gradient(to bottom, transparent 0 calc(calc(var(--base-font-size) * 1.2) - 1px), #ccc calc(calc(var(--base-font-size) * 1.2) - 1px) calc(var(--base-font-size) * 1.2)) */
     }
 
@@ -68,8 +69,8 @@ const templateHTML = `
 
     ::slotted(p) {
       font-size: 1em;
-      margin-bottom: 1.2em;
       hyphens: auto;
+      text-wrap: pretty;
     }
   </style>
   <article><slot /></article>
@@ -111,7 +112,14 @@ class TypoText extends HTMLElement {
 
   // component attributes
   static get observedAttributes() {
-    return ['font-size', 'column-width', 'column-count', 'column-gap', 'chars-per-line']
+    return [
+      'font-size',
+      'line-height',
+      'column-width',
+      'column-count',
+      'column-gap',
+      'chars-per-line'
+    ]
   }
 
   // attribute change
@@ -121,6 +129,12 @@ class TypoText extends HTMLElement {
       case 'font-size':
         this[property] = this._checkIsUnitSet(newValue)
         this.style.setProperty('--base-font-size', this[property])
+
+        break
+
+      case 'line-height':
+        this[property] = this._checkIsUnitSet(newValue)
+        this.style.setProperty('--base-line-height', this[property])
 
         break
 
@@ -192,13 +206,13 @@ class TypoText extends HTMLElement {
     const noBreakSpace = '\u00A0'
 
     return text.replace(
-      /(\s)(о|в|во|с|к|но|он|из|на|со|и|для|у|как)(\s)([\("«А-яЁёЙй])/gmui,
+      /(\s)(о|в|во|с|к|но|он|из|на|со|и|для|у|как|а|или|без)(\s)([\("«А-яЁёЙй])/gimu,
       '$1' + '$2' + noBreakSpace + '$4'
     )
   }
 
-  _checkIsUnitSet(value) {
-    return /^(\d+)$/g.test(value) ? `${value}px` : value
+  _checkIsUnitSet(value, unit = 'px') {
+    return /^(\d+)$/g.test(value) ? `${value}${unit}` : value
   }
 
   _removeUnits(value) {
@@ -292,7 +306,7 @@ class TypoText extends HTMLElement {
     const p = paragraph.cloneNode()
     p.textContent = ''
     this.appendChild(p)
-    p.style.width = this['column-width']
+    p.style.width = this._checkIsUnitSet(this['column-width'])
 
     const paragraphText = paragraph.textContent.replace(/\u00AD/g, '')
     let charsAmountInLine = paragraphText.length
@@ -442,7 +456,7 @@ class TypoText extends HTMLElement {
     this.breakpoints = []
 
     for (let i = 1; i <= this['column-count']; i++) {
-      this.breakpoints.push(this['column-width'] * i + this['column-gap'] * (i - 1))
+      this.breakpoints.push(parseFloat(this['column-width']) * i + this['column-gap'] * (i - 1))
     }
 
     this.breakpoints.reverse()
@@ -457,6 +471,19 @@ class TypoText extends HTMLElement {
           this.currentColumn = this['column-count'] - currentBreakpointIndex
 
           this._rerender()
+        }
+
+        const heading = this.getElementsByTagName('h1')[0]
+        if (heading.scrollWidth > heading.offsetWidth) {
+          heading.style.overflowWrap = 'break-word'
+          heading.style.hyphens = 'manual'
+          this.headingNoBreakWidth = heading.scrollWidth
+        } else if (
+          heading.style.hyphens != 'none' &&
+          heading.offsetWidth > this.headingNoBreakWidth
+        ) {
+          heading.style.overflowWrap = 'normal'
+          heading.style.hyphens = 'none'
         }
       })
     })
@@ -476,21 +503,36 @@ class TypoText extends HTMLElement {
   }
 
   _getImageHeight(figure, image) {
-    if (getComputedStyle(figure).maxWidth && getComputedStyle(figure).maxWidth.endsWith('%')) {
+    const oRatio = image.naturalWidth / image.naturalHeight
+
+    if (
+      getComputedStyle(figure).maxWidth &&
+      getComputedStyle(figure).maxWidth.endsWith('%') &&
+      (image.style.objectFit == 'contain' || !figure.style.float)
+    ) {
       const figureWidth =
-        (getComputedStyle(figure).maxWidth.split('%')[0] * this._removeUnits(this['column-width'])) /
-        100
-      const oRatio = image.naturalWidth / image.naturalHeight
-      return this._rounded(
-        Math.floor((figureWidth / oRatio) / this.typographySettings.lineHeight) *
-          this.typographySettings.lineHeight -
-          this.baseTopOffset -
-          this.baseBottomOffset,
-        2
-      )
+        (getComputedStyle(figure).maxWidth.split('%')[0] * parseFloat(this['column-width'])) / 100
+      // console.log(figureWidth / oRatio, image.offsetHeight)
+      if (
+        figureWidth / oRatio < image.offsetHeight ||
+        getComputedStyle(figure).maxWidth == '100%'
+      ) {
+        return this._rounded(
+          Math.floor(figureWidth / oRatio / this.typographySettings.lineHeight) *
+            this.typographySettings.lineHeight -
+            this.baseTopOffset -
+            this.baseBottomOffset,
+          2
+        )
+      } else {
+        image.style.width = 'auto'
+        image.style.marginLeft = 'auto'
+        image.style.marginRight = 'auto'
+        figure.style.width = 'min-content'
+      }
     }
 
-    return optimalHeight = this._rounded(
+    return this._rounded(
       Math.round(image.offsetHeight / this.typographySettings.lineHeight) *
         this.typographySettings.lineHeight -
         this.baseTopOffset -
@@ -499,7 +541,7 @@ class TypoText extends HTMLElement {
     )
   }
 
-  _setCorrectImageSize(image) {
+  _setImageStyle(image) {
     const figure = this._createFigureFromImage(image)
 
     image.style.width = '100%'
@@ -522,15 +564,22 @@ class TypoText extends HTMLElement {
     }
 
     if (isFloat) {
-      figure.style.maxWidth = '30%'
+      figure.style.maxWidth =
+        this._checkIsUnitSet(img.getAttribute('image-float-percent'), '%') || '30%'
       figure.style.width = 'max-content'
+    } else {
+      figure.style.maxWidth = '100%'
     }
 
+    this._setImageSize(figure, image)
+
+    this._setFigureOffsets(figure)
+  }
+
+  _setImageSize(figure, image) {
     const correctImageHeight = this._getImageHeight(figure, image)
 
     image.style.height = `${correctImageHeight}px`
-
-    this._setFigureOffsets(figure)
   }
 
   _setFigureOffsets(figure) {
@@ -538,7 +587,10 @@ class TypoText extends HTMLElement {
     figure.style.marginBottom = `${this.typographySettings.lineHeight}px`
 
     if (!figure.style.float) {
-      if (this.getBoundingClientRect().top == figure.getBoundingClientRect().top) {
+      if (
+        this.getBoundingClientRect().top == figure.getBoundingClientRect().top ||
+        figure.previousElementSibling.tagName == 'H1'
+      ) {
         figure.style.marginTop = `0px`
       } else {
         figure.style.marginTop = `${this.typographySettings.lineHeight}px`
@@ -640,7 +692,7 @@ class TypoText extends HTMLElement {
 
         case 'lg':
           heading.style.fontSize = `${this.typographySettings.fontSize * 3}px`
-          heading.style.lineHeight = `${this.typographySettings.lineHeight * 3}px`
+          heading.style.lineHeight = `${this.typographySettings.lineHeight * 2.5}px`
           heading.style.marginTop = `-${this.typographySettings.lineHeight}px`
           break
       }
@@ -764,6 +816,20 @@ class TypoText extends HTMLElement {
       await this._customOnLoad(this._setColumnWidthStyles)
     }, 1)
 
+    if (this.getAttribute('font-size')) {
+      this.style.setProperty(
+        '--base-font-size',
+        this._checkIsUnitSet(this.getAttribute('font-size'))
+      )
+    }
+
+    if (this.getAttribute('line-height')) {
+      this.style.setProperty(
+        '--base-line-height',
+        this._checkIsUnitSet(this.getAttribute('line-height'))
+      )
+    }
+
     for (const paragraph of Array.from(this.getElementsByTagName('p'))) {
       paragraph.textContent = this._rusHyphenate(paragraph.textContent)
       paragraph.textContent = this._noBreakPrepositions(paragraph.textContent)
@@ -799,14 +865,24 @@ class TypoText extends HTMLElement {
 
     this.baseTopOffset =
       this.typographySettings.lineHeight -
+      (this.typographySettings.lineHeight - this.typographySettings.fontSize * 1.2) / 2 -
       (this.fontMetrics.descent - this.fontMetrics.xHeight) * this.typographySettings.fontSize
-    this.baseBottomOffset = this.fontMetrics.descent * this.typographySettings.fontSize
+    this.baseBottomOffset =
+      this.fontMetrics.descent * this.typographySettings.fontSize +
+      (this.typographySettings.lineHeight - this.typographySettings.fontSize * 1.2) / 2
+
+    for (const paragraph of Array.from(this.getElementsByTagName('p'))) {
+      paragraph.style.marginBottom = this.typographySettings.lineHeightPx
+    }
 
     for (const image of Array.from(this.getElementsByTagName('img'))) {
-      await this._customOnLoad(this._setCorrectImageSize, image)
+      await this._customOnLoad(this._setImageStyle, image)
     }
 
     const heading = this.getElementsByTagName('h1')[0]
+    heading.textContent = this._rusHyphenate(heading.textContent)
+    heading.textContent = this._noBreakPrepositions(heading.textContent)
+    heading.style.hyphens = 'none'
 
     setTimeout(() => {
       this._customOnLoad(this._setHeadingStyle, heading)
